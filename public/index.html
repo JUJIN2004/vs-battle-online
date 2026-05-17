@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Online VS Battle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <style>
+    body {
+      background: #111;
+      color: white;
+      text-align: center;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .hp {
+      height: 20px;
+      background: red;
+      margin: 10px;
+      transition: width 0.3s;
+    }
+    input {
+      padding: 10px;
+      margin-top: 10px;
+      width: 220px;
+      font-size: 1.1em;
+    }
+    button {
+      padding: 10px 14px;
+      margin-left: 6px;
+      font-size: 1.05em;
+      cursor: pointer;
+    }
+    .row {
+      margin: 10px 0;
+    }
+    .hidden { display: none; }
+    .countdown { font-size: 3em; margin: 10px 0; transition: transform 0.2s ease; }
+    .banner { font-size: 2em; margin: 12px 0; }
+    .hit { animation: shake 0.3s linear; }
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .skill-card {
+      background: #1d1d1d;
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: left;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .skill-card.ready {
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4);
+    }
+    .skill-card.cooldown {
+      opacity: 0.65;
+    }
+    .skill-card.ultimate {
+      box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.5);
+    }
+    .skill-name {
+      font-weight: 700;
+      font-size: 1.05em;
+      margin-bottom: 4px;
+    }
+    .skill-meta {
+      font-size: 0.9em;
+      color: #a1a1aa;
+      margin-bottom: 6px;
+    }
+    .skill-status {
+      font-size: 0.85em;
+      color: #e5e5e5;
+    }
+    .skill-instructions {
+      font-size: 0.95em;
+      color: #cbd5f6;
+      margin-top: 6px;
+    }
+    .shield-row {
+      font-size: 0.85em;
+      color: #bfdbfe;
+      text-align: right;
+      margin-top: 4px;
+    }
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      50% { transform: translateX(6px); }
+      75% { transform: translateX(-3px); }
+      100% { transform: translateX(0); }
+    }
+  </style>
+  <!-- Firebase compat SDKs for simple script usage -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+  <h1>⚔️ Online Typing Battle ⚔️</h1>
+
+  <div id="lobby">
+  <div class="row">
+    <p>Enter Room ID:</p>
+    <input id="roomInput" placeholder="Enter Room ID" />
+    <button id="joinBtn">Join Room</button>
+  </div>
+
+  <div class="row">
+    <p>Or generate your own Room ID:</p>
+    <button id="generateBtn">Generate Room ID</button>
+    <p>Your generated Room ID: <span id="generatedRoomID"></span></p>
+  </div>
+
+  <hr style="opacity:.15; margin:16px 0;" />
+
+  <div id="createRoomSection" class="row" style="display:none;">
+    <h3 style="margin:8px 0">Create Room (separate)</h3>
+    <button id="createRoomBtn">Create Room</button>
+    <button id="joinCreatedBtn" class="hidden">Join Created Room</button>
+    <button id="copyCreatedBtn" class="hidden">Copy Room ID</button>
+    <p>Created Room: <span id="createdRoomID"></span></p>
+  </div>
+
+  <hr style="opacity:.15; margin:16px 0;" />
+
+  <div class="row">
+    <h3 style="margin:8px 0">Practice Mode</h3>
+    <label for="difficultySelect">Difficulty:</label>
+    <select id="difficultySelect" style="margin-left:8px; padding:6px 8px; background:#181818; color:#fff; border:none; box-shadow:0 0 0 1px #333 inset;">
+      <option value="easy">Easy</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+    </select>
+    <button id="startPracticeBtn" style="margin-left:8px;">Start Practice</button>
+  </div>
+
+  <hr style="opacity:.15; margin:16px 0;" />
+
+  <div class="row">
+    <h3 style="margin:8px 0">Quick Match</h3>
+    <button id="quickMatchBtn">Find Match</button>
+    <button id="cancelMatchBtn" class="hidden">Cancel</button>
+    <span id="matchmakingStatus" style="margin-left:8px;"></span>
+  </div>
+  </div>
+
+  <p>Room: <span id="roomDisplay"></span></p>
+  <p id="status">Waiting for opponent...</p>
+  <p id="role"></p>
+
+  <div id="game" style="display:none;">
+  <div id="arena" style="display:flex; gap:16px; align-items:flex-end; justify-content:center; margin: 12px 0;">
+    <div id="leftPlayer" style="flex:1; max-width:420px; background:#1a1a1a; padding:12px; border-radius:12px; box-shadow:0 0 0 2px rgba(0,0,0,0.2) inset;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span>Player 1</span>
+        <span id="youBadgeP1" class="hidden" style="background:#22c55e; color:#111; padding:2px 8px; border-radius:999px; font-weight:700;">You</span>
+      </div>
+      <div style="height:20px; background:#3a0d0d; border-radius:8px; overflow:hidden;">
+        <div class="hp" id="p1hp" style="width:100%; height:100%; background:linear-gradient(90deg,#ef4444,#dc2626);"></div>
+      </div>
+      <div class="shield-row">Shield: <span id="p1shield">0</span></div>
+    </div>
+    <div id="rightPlayer" style="flex:1; max-width:420px; background:#1a1a1a; padding:12px; border-radius:12px; box-shadow:0 0 0 2px rgba(0,0,0,0.2) inset;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span>Player 2</span>
+        <span id="youBadgeP2" class="hidden" style="background:#22c55e; color:#111; padding:2px 8px; border-radius:999px; font-weight:700;">You</span>
+      </div>
+      <div style="height:20px; background:#0d1a3a; border-radius:8px; overflow:hidden;">
+        <div class="hp" id="p2hp" style="width:100%; height:100%; background:linear-gradient(90deg,#60a5fa,#2563eb);"></div>
+      </div>
+      <div class="shield-row">Shield: <span id="p2shield">0</span></div>
+    </div>
+  </div>
+
+  <div id="skillDisplay" class="row"></div>
+  <input id="typeInput" placeholder="Type skill..." autocomplete="off" style="width:min(520px,90vw); font-size:1.25em; padding:12px 14px; border-radius:10px; border:none; outline: none; box-shadow: 0 0 0 2px #333 inset; background:#181818; color:#fff;" />
+  <div class="row">
+    <button id="readyBtn">I'm Ready</button>
+    <span id="readyStatus"></span>
+  </div>
+  <div class="row">
+    <button id="rematchBtn" class="hidden">Rematch</button>
+    <span id="rematchStatus"></span>
+  </div>
+  <div class="row">
+    <button id="cancelGameBtn">Cancel Match</button>
+    <button id="lobbyBtn" class="hidden" style="margin-left:6px;">Lobby</button>
+  </div>
+  <div id="countdown" class="countdown hidden"></div>
+  <div id="resultBanner" class="banner hidden"></div>
+  <div id="fxLayer" style="position:relative; height:80px; margin: 10px 0;"></div>
+  </div>
+
+  <script>
+    // 1) Configure Firebase (replace with your project config from Firebase console)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBU6y9xyZoNoqPxmiG8bpqy7gKJAPhak70",
+      authDomain: "type-dc3b7.firebaseapp.com",
+      databaseURL: "https://type-dc3b7-default-rtdb.firebaseio.com",
+      projectId: "type-dc3b7",
+      storageBucket: "type-dc3b7.firebasestorage.app",
+      messagingSenderId: "836695047389",
+      appId: "1:836695047389:web:fda6b42bf687c6c8dcef34",
+      measurementId: "G-XP3XE467RH"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const playerId = (self.crypto?.randomUUID && self.crypto.randomUUID()) || Math.random().toString(36).slice(2);
+    const joinButton = document.getElementById('joinBtn');
+    const generateButton = document.getElementById('generateBtn');
+    const roomInput = document.getElementById('roomInput');
+    const generatedRoomID = document.getElementById('generatedRoomID');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const joinCreatedBtn = document.getElementById('joinCreatedBtn');
+    const copyCreatedBtn = document.getElementById('copyCreatedBtn');
+    const createdRoomID = document.getElementById('createdRoomID');
+    const difficultySelect = document.getElementById('difficultySelect');
+    const startPracticeBtn = document.getElementById('startPracticeBtn');
+    const quickMatchBtn = document.getElementById('quickMatchBtn');
+    const cancelMatchBtn = document.getElementById('cancelMatchBtn');
+    const matchmakingStatus = document.getElementById('matchmakingStatus');
+    const roomDisplay = document.getElementById('roomDisplay');
+    const status = document.getElementById('status');
+    const skillDisplay = document.getElementById("skillDisplay");
+    const input = document.getElementById("typeInput");
+    const roleDisplay = document.getElementById("role");
+    const readyBtn = document.getElementById('readyBtn');
+    const readyStatus = document.getElementById('readyStatus');
+    const rematchBtn = document.getElementById('rematchBtn');
+    const rematchStatus = document.getElementById('rematchStatus');
+    const cancelGameBtn = document.getElementById('cancelGameBtn');
+    const lobbyBtn = document.getElementById('lobbyBtn');
+    const countdownEl = document.getElementById('countdown');
+    const resultBanner = document.getElementById('resultBanner');
+    const p1ShieldEl = document.getElementById('p1shield');
+    const p2ShieldEl = document.getElementById('p2shield');
+    const lobbyEl = document.getElementById('lobby');
+    const gameEl = document.getElementById('game');
+
+    const MAX_HP = 100;
+    const MAX_SHIELD = 60;
+    const ROOM_TTL = 10 * 60 * 1000; // 10 minutes
+
+    let joinedRoomRef = null;
+    let hasLeftRoom = false;
+    let createdRoomRef = null;
+    let createdRoomIdVal = '';
+    let gameMode = 'online'; // 'online' | 'practice'
+    let practiceDifficulty = 'normal';
+    let botTimer = null;
+    let isMatching = false;
+    let assignmentListenerAttached = false;
+
+    const SKILL_LOADOUT = {
+      p1: [
+        { id: 'quick-strike', name: 'Quick Strike', category: 'Basic Attack', effect: 'damage', power: 12, cooldown: 0, description: 'Deal 12 damage to your opponent.', color: '#f97316' },
+        { id: 'iron-guard', name: 'Iron Guard', category: 'Defensive Skill', effect: 'shield', power: 20, cooldown: 6, description: 'Gain 20 shield that absorbs incoming damage.', color: '#60a5fa' },
+        { id: 'second-wind', name: 'Second Wind', category: 'Defensive Skill', effect: 'heal', power: 18, cooldown: 8, description: 'Restore 18 of your HP (cannot exceed 100).', color: '#22c55e' },
+        { id: 'blade-flurry', name: 'Blade Flurry', category: 'Normal Attack', effect: 'damage', power: 18, cooldown: 4, description: 'Slash rapidly to deal 18 damage.', color: '#ef4444' },
+        { id: 'crimson-lunge', name: 'Crimson Lunge', category: 'Normal Attack', effect: 'damage', power: 16, cooldown: 3, description: 'Dash forward and deal 16 damage.', color: '#f97316' },
+        { id: 'dragon-fury', name: 'Dragon Fury', category: 'Ultimate Attack', effect: 'ultimate', power: 32, cooldown: 12, description: 'Unleash your ultimate for 32 damage. Long cooldown.', color: '#facc15' }
+      ],
+      p2: [
+        { id: 'frost-jab', name: 'Frost Jab', category: 'Basic Attack', effect: 'damage', power: 12, cooldown: 0, description: 'Deal 12 chilling damage to your opponent.', color: '#38bdf8' },
+        { id: 'glacial-wall', name: 'Glacial Wall', category: 'Defensive Skill', effect: 'shield', power: 20, cooldown: 6, description: 'Raise a wall that grants 20 shield.', color: '#60a5fa' },
+        { id: 'renewing-mist', name: 'Renewing Mist', category: 'Defensive Skill', effect: 'heal', power: 18, cooldown: 8, description: 'Restore 18 HP with soothing mist.', color: '#22c55e' },
+        { id: 'ice-lance', name: 'Ice Lance', category: 'Normal Attack', effect: 'damage', power: 18, cooldown: 4, description: 'Launch a lance of ice for 18 damage.', color: '#60a5fa' },
+        { id: 'storm-bolt', name: 'Storm Bolt', category: 'Normal Attack', effect: 'damage', power: 16, cooldown: 3, description: 'Strike swiftly with 16 damage.', color: '#38bdf8' },
+        { id: 'aurora-nova', name: 'Aurora Nova', category: 'Ultimate Attack', effect: 'ultimate', power: 32, cooldown: 12, description: 'Call down the aurora for 32 damage.', color: '#facc15' }
+      ]
+    };
+
+    const skillNameIndex = { p1: new Map(), p2: new Map() };
+    const skillCardRefs = new Map();
+    Object.entries(SKILL_LOADOUT).forEach(([key, skills]) => {
+      skills.forEach(skill => {
+        skillNameIndex[key].set(skill.name.toLowerCase(), skill);
+      });
+    });
+    let combatState = {
+      p1: { hp: MAX_HP, shield: 0 },
+      p2: { hp: MAX_HP, shield: 0 }
+    };
+    let cooldownState = { p1: {}, p2: {} };
+    let cooldownIntervalId = null;
+    let playerRole = "";
+    let joinedRoom = "";
+    let startAt = null;
+    let winner = null;
+    let myReadyState = false;
+
+    function generateRoomID() {
+      return Math.random().toString(36).substring(2, 6).toUpperCase();
+    }
+
+    function updateUI(roomId) {
+      joinedRoom = roomId;
+      roomDisplay.textContent = roomId;
+      status.textContent = "Waiting for opponent...";
+      skillDisplay.textContent = "";
+      input.value = "";
+      input.disabled = true; // lock typing until both players are ready and countdown finishes
+      resultBanner.classList.add('hidden');
+      countdownEl.classList.add('hidden');
+      readyStatus.textContent = '';
+      readyBtn.disabled = false;
+      myReadyState = false;
+      rematchBtn.classList.add('hidden');
+      rematchBtn.disabled = false;
+      rematchBtn.textContent = 'Rematch';
+      rematchStatus.textContent = '';
+      if (cancelGameBtn) cancelGameBtn.disabled = false;
+      if (lobbyBtn) lobbyBtn.classList.add('hidden');
+      showGame();
+      setTimeout(() => input.focus(), 0);
+    }
+
+    function getRoleKey(role = playerRole) {
+      if (role === 'Player 1') return 'p1';
+      if (role === 'Player 2') return 'p2';
+      return null;
+    }
+
+    function createDefaultState() {
+      return {
+        combat: {
+          p1: { hp: MAX_HP, shield: 0 },
+          p2: { hp: MAX_HP, shield: 0 }
+        },
+        cooldowns: { p1: {}, p2: {} },
+        lastAction: null
+      };
+    }
+
+    function getSkillColor(skillName, fallback = '#fff') {
+      if (!skillName) return fallback;
+      const lower = skillName.toLowerCase();
+      for (const key of ['p1', 'p2']) {
+        const found = SKILL_LOADOUT[key].find(skill => skill.name.toLowerCase() === lower);
+        if (found) return found.color || fallback;
+      }
+      return fallback;
+    }
+
+    function flashSkillCard(skillId) {
+      const ref = skillCardRefs.get(skillId);
+      if (!ref) return;
+      ref.card.animate([
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.05)' },
+        { transform: 'scale(1)' }
+      ], { duration: 220, easing: 'ease-out' });
+    }
+
+    function renderSkillCards() {
+      skillDisplay.innerHTML = '';
+      const roleKey = getRoleKey();
+      if (!roleKey) return;
+
+      const headline = document.createElement('div');
+      headline.textContent = 'Type a skill name to activate it';
+      headline.style.marginBottom = '8px';
+      headline.style.fontWeight = '600';
+      skillDisplay.appendChild(headline);
+
+      const grid = document.createElement('div');
+      grid.className = 'skills-grid';
+      skillCardRefs.clear();
+
+      SKILL_LOADOUT[roleKey].forEach(skill => {
+        const card = document.createElement('div');
+        card.className = 'skill-card ready';
+        card.dataset.skillId = skill.id;
+        if (skill.category === 'Ultimate Attack') card.classList.add('ultimate');
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'skill-name';
+        nameEl.textContent = skill.name;
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'skill-meta';
+        metaEl.textContent = `${skill.category} • ${skill.cooldown ? `${skill.cooldown}s CD` : 'No cooldown'}`;
+
+        const statusEl = document.createElement('div');
+        statusEl.className = 'skill-status';
+        statusEl.textContent = 'Ready';
+
+        const infoEl = document.createElement('div');
+        infoEl.className = 'skill-instructions';
+        infoEl.textContent = skill.description;
+
+        card.appendChild(nameEl);
+        card.appendChild(metaEl);
+        card.appendChild(statusEl);
+        card.appendChild(infoEl);
+
+        grid.appendChild(card);
+        skillCardRefs.set(skill.id, { card, status: statusEl });
+      });
+
+      const reminder = document.createElement('div');
+      reminder.className = 'skill-instructions';
+      reminder.style.textAlign = 'center';
+      reminder.style.marginTop = '6px';
+      reminder.textContent = 'Casting is instant: simply type the skill name exactly.';
+
+      skillDisplay.appendChild(grid);
+      skillDisplay.appendChild(reminder);
+      ensureCooldownInterval();
+      updateSkillStatusUI();
+    }
+
+    function leaveRoom() {
+      if (!joinedRoomRef || !joinedRoom || hasLeftRoom) return;
+      hasLeftRoom = true;
+      const roleKey = getRoleKey();
+      try {
+        joinedRoomRef.off();
+      } catch (err) {
+        console.warn('Failed to detach listeners', err);
+      }
+      joinedRoomRef.child('players').transaction(players => {
+        if (!players) return players;
+        delete players[playerId];
+        return players;
+      }, (error, committed, snapshot) => {
+        if (error) {
+          console.error('Failed to update players on leave', error);
+        }
+        const remaining = snapshot?.val();
+        if (!remaining || Object.keys(remaining).length === 0) {
+          joinedRoomRef.remove().catch(err => console.error('Failed to remove empty room', err));
+        } else if (roleKey) {
+          joinedRoomRef.child(`ready/${roleKey}`).set(false);
+          joinedRoomRef.child(`rematch/${roleKey}`).set(false);
+        }
+      });
+      joinedRoomRef = null;
+      joinedRoom = "";
+      playerRole = "";
+      showLobby();
+    }
+
+    window.addEventListener('beforeunload', leaveRoom);
+    window.addEventListener('pagehide', leaveRoom);
+
+    function createRoomOnly() {
+      if (createdRoomRef) {
+        try { createdRoomRef.off(); } catch {}
+        createdRoomRef = null;
+      }
+      const newId = generateRoomID();
+      const ref = db.ref(`rooms/${newId}`);
+      const base = {
+        players: {},
+        statusMessage: 'Room created. Waiting for players...',
+        state: createDefaultState(),
+        ready: { p1: false, p2: false },
+        startAt: null,
+        winner: null,
+        rematch: { p1: false, p2: false },
+        meta: { createdAt: Date.now(), creatorId: playerId }
+      };
+      ref.set(base);
+      createdRoomRef = ref;
+      createdRoomIdVal = newId;
+      createdRoomID.textContent = newId;
+      joinCreatedBtn.classList.remove('hidden');
+      copyCreatedBtn.classList.remove('hidden');
+      status.textContent = 'Room created. Share the ID or join it.';
+    }
+
+    function cleanupCreatedRoomIfUnused() {
+      if (!createdRoomRef) return;
+      createdRoomRef.child('players').once('value').then(s => {
+        const players = s.val() || {};
+        if (Object.keys(players).length === 0) {
+          createdRoomRef.remove().catch(err => console.error('Failed to remove unused created room', err));
+        }
+      });
+    }
+
+    window.addEventListener('beforeunload', cleanupCreatedRoomIfUnused);
+    window.addEventListener('pagehide', cleanupCreatedRoomIfUnused);
+
+    function startQuickMatch() {
+      if (isMatching) return;
+      gameMode = 'online';
+      isMatching = true;
+      quickMatchBtn.disabled = true;
+      cancelMatchBtn.classList.remove('hidden');
+      cancelMatchBtn.disabled = false;
+      matchmakingStatus.textContent = 'Searching for an opponent...';
+
+      const myRef = db.ref(`matchmaking/queue/${playerId}`);
+      myRef.set({ ts: Date.now(), id: playerId });
+      try { myRef.onDisconnect().remove(); } catch {}
+
+      attachAssignmentListener();
+      setTimeout(tryPairWithOpponent, 100); // initial attempt
+    }
+
+    function cancelQuickMatch() {
+      if (!isMatching) return;
+      isMatching = false;
+      quickMatchBtn.disabled = false;
+      cancelMatchBtn.classList.add('hidden');
+      matchmakingStatus.textContent = '';
+      db.ref(`matchmaking/queue/${playerId}`).remove();
+      db.ref(`matchmaking/assigned/${playerId}`).remove();
+    }
+
+    function attachAssignmentListener() {
+      if (assignmentListenerAttached) return;
+      assignmentListenerAttached = true;
+      const assignedRef = db.ref(`matchmaking/assigned/${playerId}`);
+      assignedRef.on('value', s => {
+        const roomId = s.val();
+        if (!roomId) return;
+        // clear queue and assignment
+        db.ref().update({
+          [`matchmaking/queue/${playerId}`]: null,
+          [`matchmaking/assigned/${playerId}`]: null
+        });
+        isMatching = false;
+        quickMatchBtn.disabled = false;
+        cancelMatchBtn.classList.add('hidden');
+        matchmakingStatus.textContent = 'Match found! Joining...';
+        joinRoom(roomId);
+      });
+    }
+
+    async function tryPairWithOpponent() {
+      if (!isMatching) return;
+      const queueSnap = await db.ref('matchmaking/queue').once('value');
+      const queue = queueSnap.val() || {};
+      const others = Object.keys(queue).filter(id => id !== playerId);
+      if (others.length === 0) {
+        // keep polling while waiting
+        setTimeout(tryPairWithOpponent, 800);
+        return;
+      }
+      // Choose a random opponent from the queue
+      const opponentId = others[Math.floor(Math.random() * others.length)];
+      const a = playerId < opponentId ? playerId : opponentId;
+      const b = playerId < opponentId ? opponentId : playerId;
+      if (playerId !== a) {
+        // Only the smallest ID attempts to create the room
+        setTimeout(tryPairWithOpponent, 800);
+        return;
+      }
+      const newRoomId = generateRoomID();
+      const updates = {};
+      updates[`matchmaking/queue/${a}`] = null;
+      updates[`matchmaking/queue/${b}`] = null;
+      updates[`matchmaking/assigned/${a}`] = newRoomId;
+      updates[`matchmaking/assigned/${b}`] = newRoomId;
+      const base = {
+        players: { [a]: 'Player 1', [b]: 'Player 2' },
+        statusMessage: 'Match found! Preparing arena...',
+        state: createDefaultState(),
+        ready: { p1: false, p2: false },
+        startAt: null,
+        winner: null,
+        rematch: { p1: false, p2: false },
+        meta: { createdAt: Date.now() }
+      };
+      updates[`rooms/${newRoomId}`] = base;
+      try {
+        await db.ref().update(updates);
+      } catch (e) {
+        // Likely a race; try again shortly
+        setTimeout(tryPairWithOpponent, 500);
+      }
+    }
+
+    function ensureCooldownInterval() {
+      if (cooldownIntervalId) return;
+      cooldownIntervalId = setInterval(updateSkillStatusUI, 200);
+    }
+
+    function updateSkillStatusUI() {
+      const roleKey = getRoleKey();
+      if (!roleKey) return;
+      const now = Date.now();
+      SKILL_LOADOUT[roleKey].forEach(skill => {
+        const ref = skillCardRefs.get(skill.id);
+        if (!ref) return;
+        const readyAt = cooldownState[roleKey]?.[skill.id] || 0;
+        if (readyAt <= now) {
+          ref.status.textContent = 'Ready';
+          ref.card.classList.add('ready');
+          ref.card.classList.remove('cooldown');
+        } else {
+          const seconds = Math.max(0, (readyAt - now) / 1000);
+          ref.status.textContent = `Cooling down: ${seconds.toFixed(1)}s`;
+          ref.card.classList.remove('ready');
+          ref.card.classList.add('cooldown');
+        }
+      });
+    }
+
+    function startPractice() {
+      if (joinedRoomRef) leaveRoom();
+      gameMode = 'practice';
+      winner = null;
+      myReadyState = false;
+      playerRole = 'Player 1';
+      showGame();
+      roleDisplay.textContent = 'You are: Player 1 (Practice)';
+      document.getElementById('youBadgeP1').classList.remove('hidden');
+      document.getElementById('youBadgeP2').classList.add('hidden');
+      document.getElementById('leftPlayer').style.boxShadow = '0 0 0 2px #22c55e inset';
+      document.getElementById('rightPlayer').style.boxShadow = '0 0 0 2px rgba(0,0,0,0.2) inset';
+      roomDisplay.textContent = 'Practice';
+      status.textContent = `Practice vs Bot (${practiceDifficulty})`;
+      resultBanner.classList.add('hidden');
+      rematchBtn.classList.add('hidden');
+      readyBtn.disabled = true;
+      rematchBtn.disabled = true;
+
+      // reset local state
+      combatState = { p1: { hp: MAX_HP, shield: 0 }, p2: { hp: MAX_HP, shield: 0 } };
+      cooldownState = { p1: {}, p2: {} };
+      renderSkillCards();
+      updateSkillStatusUI();
+      // update HP bars
+      document.getElementById('p1hp').style.width = '100%';
+      document.getElementById('p2hp').style.width = '100%';
+      p1ShieldEl.textContent = '0';
+      p2ShieldEl.textContent = '0';
+
+      // countdown then enable
+      const startAtLocal = Date.now() + 3000;
+      countdownEl.classList.remove('hidden');
+      input.disabled = true;
+      const tick = () => {
+        const msLeft = startAtLocal - Date.now();
+        if (msLeft <= 0) {
+          countdownEl.classList.add('hidden');
+          input.disabled = false;
+          setTimeout(() => input.focus(), 0);
+          startBotLoop();
+          return;
+        }
+        const secs = Math.ceil(msLeft / 1000);
+        countdownEl.textContent = secs;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    function stopPractice() {
+      if (botTimer) { clearInterval(botTimer); botTimer = null; }
+    }
+
+    function startBotLoop() {
+      stopPractice();
+      const ranges = {
+        easy: [1800, 2600],
+        normal: [1000, 1500],
+        hard: [600, 900]
+      }[practiceDifficulty] || [1000, 1500];
+
+      const span = ranges[1] - ranges[0];
+      const loop = () => {
+        if (winner || gameMode !== 'practice') return;
+        const delay = ranges[0] + Math.random() * span;
+        botTimer = setTimeout(() => {
+          const skill = chooseBotSkill();
+          if (skill) attemptPracticeSkill('p2', skill);
+          loop();
+        }, delay);
+      };
+      loop();
+    }
+
+    function chooseBotSkill() {
+      const now = Date.now();
+      const ready = SKILL_LOADOUT.p2.filter(s => (cooldownState.p2[s.id] || 0) <= now);
+      if (ready.length === 0) return null;
+      // Basic heuristic: if low HP use heal/shield if ready
+      if (combatState.p2.hp <= 40) {
+        const heal = ready.find(s => s.effect === 'heal');
+        if (heal) return heal;
+        const shield = ready.find(s => s.effect === 'shield');
+        if (shield) return shield;
+      }
+      // Use ultimate when ready on harder difficulties
+      if (practiceDifficulty !== 'easy') {
+        const ult = ready.find(s => s.effect === 'ultimate');
+        if (ult) return ult;
+      }
+      // Prefer higher damage
+      const dmg = ready.filter(s => s.effect !== 'heal' && s.effect !== 'shield').sort((a,b)=>b.power-a.power);
+      if (dmg.length) return dmg[0];
+      return ready[0];
+    }
+
+    function attemptPracticeSkill(actorKey, skill) {
+      if (winner || gameMode !== 'practice') return;
+      const now = Date.now();
+      const enemyKey = actorKey === 'p1' ? 'p2' : 'p1';
+      const cooldowns = cooldownState[actorKey] || (cooldownState[actorKey] = {});
+      const readyAt = cooldowns[skill.id] || 0;
+      if (readyAt > now) return;
+
+      const me = combatState[actorKey];
+      const enemy = combatState[enemyKey];
+      if (!me || !enemy) return;
+
+      if (skill.effect === 'heal') {
+        me.hp = Math.min(MAX_HP, me.hp + skill.power);
+      } else if (skill.effect === 'shield') {
+        me.shield = Math.min(MAX_SHIELD, me.shield + skill.power);
+      } else {
+        let remaining = skill.power;
+        const absorb = Math.min(enemy.shield, remaining);
+        enemy.shield = Math.max(0, enemy.shield - absorb);
+        remaining -= absorb;
+        if (remaining > 0) enemy.hp = Math.max(0, enemy.hp - remaining);
+      }
+      cooldowns[skill.id] = now + (skill.cooldown || 0) * 1000;
+
+      // Update UI
+      document.getElementById('p1hp').style.width = combatState.p1.hp + '%';
+      document.getElementById('p2hp').style.width = combatState.p2.hp + '%';
+      p1ShieldEl.textContent = combatState.p1.shield;
+      p2ShieldEl.textContent = combatState.p2.shield;
+      updateSkillStatusUI();
+      animateAttack(actorKey === 'p1' ? 'Player 1' : 'Player 2', skill.name, skill.effect);
+
+      if (combatState.p1.hp <= 0 || combatState.p2.hp <= 0) {
+        winner = combatState.p1.hp <= 0 ? 'Player 2' : 'Player 1';
+        resultBanner.classList.remove('hidden');
+        resultBanner.textContent = winner === 'Player 1' ? 'You Win!' : 'You Lose!';
+        status.textContent = winner === 'Player 1' ? 'Victory!' : 'Defeat';
+        input.disabled = true;
+        stopPractice();
+      }
+    }
+
+    function joinRoom(room) {
+      if (joinedRoomRef) leaveRoom();
+      hasLeftRoom = false;
+      updateUI(room);
+      const roomRef = db.ref(`rooms/${room}`);
+      joinedRoomRef = roomRef;
+      const playersRef = roomRef.child('players');
+
+      // Transactionally add this player and assign a role
+      playersRef.transaction(current => {
+        if (!current) current = {};
+        // If we're already in the room (e.g., assigned by matchmaking), keep state and commit
+        if (current[playerId]) return current;
+        const currentCount = Object.keys(current).length;
+        if (currentCount >= 2) return; // room full, abort
+        const role = currentCount === 0 ? 'Player 1' : 'Player 2';
+        current[playerId] = role;
+        return current;
+      }, (error, committed, snapshot) => {
+        if (!committed) {
+          status.textContent = 'This room is full!';
+          return;
+        }
+        const players = snapshot.val() || {};
+        playerRole = players[playerId];
+        roleDisplay.textContent = `You are: ${playerRole}`;
+        // Update identity badges
+        document.getElementById('youBadgeP1').classList.toggle('hidden', playerRole !== 'Player 1');
+        document.getElementById('youBadgeP2').classList.toggle('hidden', playerRole !== 'Player 2');
+        document.getElementById('leftPlayer').style.boxShadow = playerRole === 'Player 1' ? '0 0 0 2px #22c55e inset' : '0 0 0 2px rgba(0,0,0,0.2) inset';
+        document.getElementById('rightPlayer').style.boxShadow = playerRole === 'Player 2' ? '0 0 0 2px #22c55e inset' : '0 0 0 2px rgba(0,0,0,0.2) inset';
+
+        // Post a system message and ensure base state exists
+        roomRef.child('statusMessage').set(`${playerRole} has joined!`);
+        renderSkillCards();
+        updateSkillStatusUI();
+        roomRef.child('state').transaction(v => v || createDefaultState());
+        roomRef.child('ready').transaction(v => v || { p1: false, p2: false });
+        roomRef.child('rematch').transaction(v => v || { p1: false, p2: false });
+        roomRef.child('startAt').transaction(v => v || null);
+        roomRef.child('winner').transaction(v => v || null);
+        roomRef.child('meta').transaction(v => v || { createdAt: Date.now() });
+      });
+
+      // Watch player list for opponent disconnects
+      playersRef.on('value', snap => {
+        const players = snap.val() || {};
+        if (!players[playerId]) {
+          status.textContent = 'You left the room.';
+          leaveRoom();
+          return;
+        }
+        const count = Object.keys(players).length;
+        if (count < 2 && gameMode === 'online') {
+          status.textContent = 'Opponent left the room.';
+          input.disabled = true;
+          rematchBtn.classList.add('hidden');
+          if (cancelGameBtn) {
+            cancelGameBtn.disabled = true;
+            cancelGameBtn.classList.add('hidden');
+          }
+          if (lobbyBtn) lobbyBtn.classList.remove('hidden');
+        }
+      });
+
+      // Listen for system messages and skill updates
+      roomRef.child('statusMessage').on('value', s => {
+        const val = s.val();
+        if (val) status.textContent = val;
+      });
+      roomRef.child('state/combat').on('value', s => {
+        const val = s.val();
+        if (!val) return;
+        const old = {
+          p1: { ...combatState.p1 },
+          p2: { ...combatState.p2 }
+        };
+        combatState = {
+          p1: {
+            hp: Math.max(0, Math.min(MAX_HP, val.p1?.hp ?? MAX_HP)),
+            shield: Math.max(0, val.p1?.shield ?? 0)
+          },
+          p2: {
+            hp: Math.max(0, Math.min(MAX_HP, val.p2?.hp ?? MAX_HP)),
+            shield: Math.max(0, val.p2?.shield ?? 0)
+          }
+        };
+        const p1 = document.getElementById('p1hp');
+        const p2 = document.getElementById('p2hp');
+        p1.style.width = combatState.p1.hp + '%';
+        p2.style.width = combatState.p2.hp + '%';
+        p1ShieldEl.textContent = combatState.p1.shield;
+        p2ShieldEl.textContent = combatState.p2.shield;
+        if (combatState.p1.hp < old.p1.hp) { p1.classList.remove('hit'); void p1.offsetWidth; p1.classList.add('hit'); }
+        if (combatState.p2.hp < old.p2.hp) { p2.classList.remove('hit'); void p2.offsetWidth; p2.classList.add('hit'); }
+      });
+
+      roomRef.child('state/cooldowns').on('value', s => {
+        const val = s.val() || { p1: {}, p2: {} };
+        cooldownState = {
+          p1: { ...val.p1 },
+          p2: { ...val.p2 }
+        };
+        updateSkillStatusUI();
+      });
+
+      roomRef.child('rematch').on('value', s => {
+        const rematchState = s.val() || { p1: false, p2: false };
+        const meKey = getRoleKey();
+        const otherKey = meKey === 'p1' ? 'p2' : 'p1';
+        if (!meKey) return;
+        const meVote = !!rematchState[meKey];
+        const opponentVote = !!rematchState[otherKey];
+        if (winner) {
+          rematchBtn.classList.remove('hidden');
+          rematchBtn.disabled = meVote;
+          rematchBtn.textContent = meVote ? 'Waiting...' : 'Rematch';
+          rematchStatus.textContent = `You: ${meVote ? 'Ready' : 'Waiting'} • Opponent: ${opponentVote ? 'Ready' : 'Waiting'}`;
+        } else {
+          rematchBtn.classList.add('hidden');
+          rematchStatus.textContent = '';
+        }
+        if (rematchState.p1 && rematchState.p2) {
+          roomRef.transaction(current => {
+            if (!current) return current;
+            if (!current.rematch?.p1 || !current.rematch?.p2) return current;
+            current.state = createDefaultState();
+            current.ready = { p1: false, p2: false };
+            current.startAt = null;
+            current.winner = null;
+            current.rematch = { p1: false, p2: false };
+            current.lastAttack = null;
+            current.statusMessage = 'Rematch ready! Hit Ready to battle again.';
+            return current;
+          });
+        }
+      });
+
+      // Ready states
+      roomRef.child('ready').on('value', s => {
+        const val = s.val() || { p1: false, p2: false };
+        const meReady = val[playerRole === 'Player 1' ? 'p1' : 'p2'];
+        const otherReady = val[playerRole === 'Player 1' ? 'p2' : 'p1'];
+        readyStatus.textContent = `You: ${meReady ? 'Ready' : 'Not ready'} • Opponent: ${otherReady ? 'Ready' : 'Not ready'}`;
+        myReadyState = !!meReady;
+        readyBtn.disabled = winner ? true : myReadyState;
+        // Do not allow typing until both are ready
+        if (!(otherReady && meReady)) {
+          input.disabled = true;
+          countdownEl.classList.add('hidden');
+        }
+        if (otherReady && meReady) {
+          roomRef.child('startAt').transaction(v => v || (Date.now() + 3000));
+        }
+      });
+
+      // Start time & countdown
+      roomRef.child('startAt').on('value', s => {
+        startAt = s.val();
+        if (!startAt) return;
+        input.disabled = true;
+        const tick = () => {
+          const msLeft = startAt - Date.now();
+          if (msLeft <= 0) {
+            countdownEl.classList.add('hidden');
+            input.disabled = false;
+            setTimeout(() => input.focus(), 0);
+            return;
+          }
+          const secs = Math.ceil(msLeft / 1000);
+          countdownEl.classList.remove('hidden');
+          countdownEl.textContent = secs;
+          countdownEl.style.transform = 'scale(1.2)';
+          setTimeout(() => countdownEl.style.transform = 'scale(1)', 100);
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+
+      // Winner banner
+      roomRef.child('winner').on('value', s => {
+        winner = s.val();
+        if (!winner) {
+          resultBanner.classList.add('hidden');
+          rematchBtn.classList.add('hidden');
+          rematchBtn.disabled = false;
+          rematchBtn.textContent = 'Rematch';
+          rematchStatus.textContent = '';
+          input.disabled = true;
+          readyBtn.disabled = myReadyState;
+        if (cancelGameBtn) {
+          cancelGameBtn.disabled = false;
+          cancelGameBtn.classList.remove('hidden');
+        }
+          if (lobbyBtn) lobbyBtn.classList.add('hidden');
+          return;
+        }
+        resultBanner.classList.remove('hidden');
+        if (winner === playerRole) {
+          resultBanner.textContent = 'You Win!';
+          status.textContent = 'Victory!';
+        } else {
+          resultBanner.textContent = 'You Lose!';
+          status.textContent = 'Defeat';
+        }
+        input.disabled = true;
+        readyBtn.disabled = true;
+        rematchBtn.classList.remove('hidden');
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Rematch';
+        if (cancelGameBtn) {
+          cancelGameBtn.disabled = true;
+          cancelGameBtn.classList.add('hidden');
+        }
+        if (lobbyBtn) lobbyBtn.classList.remove('hidden');
+      });
+
+      // Attach global attack/cooldown listeners
+      attachAttackListeners(roomRef);
+    }
+
+    function animateAttack(attackerRole, skillName, effect = 'damage') {
+      const fx = document.getElementById('fxLayer');
+      const p1Card = document.getElementById('leftPlayer');
+      const p2Card = document.getElementById('rightPlayer');
+      const aEl = attackerRole === 'Player 1' ? p1Card : p2Card;
+      const dEl = attackerRole === 'Player 1' ? p2Card : p1Card;
+      const fxBox = fx.getBoundingClientRect();
+      const color = getSkillColor(skillName, effect === 'heal' ? '#22c55e' : effect === 'shield' ? '#60a5fa' : '#f97316');
+
+      if (effect === 'heal' || effect === 'shield') {
+        const rect = aEl.getBoundingClientRect();
+        const centerX = (rect.left + rect.right) / 2 - fxBox.left;
+        const aura = document.createElement('div');
+        aura.style.position = 'absolute';
+        aura.style.top = '20px';
+        aura.style.left = (centerX - 20) + 'px';
+        aura.style.width = '40px';
+        aura.style.height = '40px';
+        aura.style.borderRadius = '50%';
+        aura.style.boxShadow = `0 0 12px ${color}`;
+        aura.style.background = 'rgba(255,255,255,0.05)';
+        fx.appendChild(aura);
+        aura.animate([
+          { transform: 'scale(0.6)', opacity: 0.8 },
+          { transform: 'scale(1.2)', opacity: 0.6 },
+          { transform: 'scale(1.6)', opacity: 0 }
+        ], { duration: 550, easing: 'ease-out' }).onfinish = () => aura.remove();
+        return;
+      }
+
+      const attackerRect = aEl.getBoundingClientRect();
+      const defenderRect = dEl.getBoundingClientRect();
+      const startX = (attackerRect.left + attackerRect.right) / 2 - fxBox.left;
+      const endX = (defenderRect.left + defenderRect.right) / 2 - fxBox.left;
+      const proj = document.createElement('div');
+      proj.style.position = 'absolute';
+      proj.style.top = '30px';
+      proj.style.left = startX + 'px';
+      proj.style.width = effect === 'ultimate' ? '18px' : '14px';
+      proj.style.height = effect === 'ultimate' ? '18px' : '14px';
+      proj.style.borderRadius = '50%';
+      proj.style.boxShadow = `0 0 12px ${color}`;
+      proj.style.background = color;
+      fx.appendChild(proj);
+      const travelDuration = effect === 'ultimate' ? 600 : 480;
+      proj.animate([
+        { transform: 'translateX(0)' },
+        { transform: `translateX(${endX - startX}px)` }
+      ], { duration: travelDuration, easing: 'ease-out' }).onfinish = () => {
+        proj.remove();
+        const burst = document.createElement('div');
+        burst.style.position = 'absolute';
+        burst.style.top = '20px';
+        burst.style.left = endX + 'px';
+        burst.style.width = effect === 'ultimate' ? '24px' : '14px';
+        burst.style.height = effect === 'ultimate' ? '24px' : '14px';
+        burst.style.background = color;
+        burst.style.borderRadius = '50%';
+        fx.appendChild(burst);
+        burst.animate([
+          { transform: 'scale(0.8)', opacity: 1 },
+          { transform: 'scale(2.6)', opacity: 0 }
+        ], { duration: 360, easing: 'ease-out' }).onfinish = () => burst.remove();
+      };
+    }
+
+    function attemptSkill(skill) {
+      if (!joinedRoom || !playerRole) return;
+      const roleKey = getRoleKey();
+      if (!roleKey) return;
+      const roomRef = db.ref(`rooms/${joinedRoom}`);
+      const now = Date.now();
+      let blockedByCooldown = false;
+
+      roomRef.child('state').transaction(state => {
+        if (!state) state = createDefaultState();
+        if (!state.combat) {
+          state.combat = {
+            p1: { hp: MAX_HP, shield: 0 },
+            p2: { hp: MAX_HP, shield: 0 }
+          };
+        }
+        if (!state.cooldowns) state.cooldowns = { p1: {}, p2: {} };
+
+        const meKey = roleKey;
+        const enemyKey = meKey === 'p1' ? 'p2' : 'p1';
+        const cooldowns = state.cooldowns[meKey] || (state.cooldowns[meKey] = {});
+        const readyAt = cooldowns[skill.id] || 0;
+        if (readyAt > now) {
+          blockedByCooldown = true;
+          return;
+        }
+
+        if (!state.combat[meKey]) state.combat[meKey] = { hp: MAX_HP, shield: 0 };
+        if (!state.combat[enemyKey]) state.combat[enemyKey] = { hp: MAX_HP, shield: 0 };
+        const me = state.combat[meKey];
+        const enemy = state.combat[enemyKey];
+        me.hp = Math.max(0, Math.min(MAX_HP, me.hp ?? MAX_HP));
+        me.shield = Math.max(0, me.shield ?? 0);
+        enemy.hp = Math.max(0, Math.min(MAX_HP, enemy.hp ?? MAX_HP));
+        enemy.shield = Math.max(0, enemy.shield ?? 0);
+
+        if (skill.effect === 'heal') {
+          me.hp = Math.min(MAX_HP, (me.hp ?? MAX_HP) + skill.power);
+        } else if (skill.effect === 'shield') {
+          me.shield = Math.min(MAX_SHIELD, (me.shield ?? 0) + skill.power);
+        } else {
+          let remaining = skill.power;
+          const shieldAbsorb = Math.min(enemy.shield ?? 0, remaining);
+          enemy.shield = Math.max(0, (enemy.shield ?? 0) - shieldAbsorb);
+          remaining -= shieldAbsorb;
+          if (remaining > 0) {
+            enemy.hp = Math.max(0, (enemy.hp ?? MAX_HP) - remaining);
+          }
+        }
+
+        const cdMs = (skill.cooldown || 0) * 1000;
+        cooldowns[skill.id] = now + cdMs;
+
+        state.lastAction = {
+          actor: meKey,
+          skillId: skill.id,
+          skillName: skill.name,
+          effect: skill.effect,
+          ts: now
+        };
+
+        return state;
+      }, (error, committed, snapshot) => {
+        if (error) {
+          console.error('Skill transaction failed', error);
+          return;
+        }
+        if (!committed) {
+          if (blockedByCooldown) {
+            status.textContent = `${skill.name} is still cooling down!`;
+          }
+          return;
+        }
+
+        const stateVal = snapshot.val();
+        if (stateVal?.cooldowns) {
+          cooldownState = {
+            p1: { ...(stateVal.cooldowns.p1 || {}) },
+            p2: { ...(stateVal.cooldowns.p2 || {}) }
+          };
+        }
+        flashSkillCard(skill.id);
+        updateSkillStatusUI();
+        input.value = '';
+        setTimeout(() => input.focus(), 0);
+
+        const combat = stateVal?.combat;
+        if (combat) {
+          const p1hp = combat.p1?.hp ?? MAX_HP;
+          const p2hp = combat.p2?.hp ?? MAX_HP;
+          if (p1hp <= 0 || p2hp <= 0) {
+            const winnerRole = p1hp <= 0 ? 'Player 2' : 'Player 1';
+            db.ref(`rooms/${joinedRoom}/winner`).transaction(v => v || winnerRole);
+          }
+        }
+
+        roomRef.child('statusMessage').set(`${playerRole} used ${skill.name}!`);
+        roomRef.update({
+          lastAttack: { attackerRole: playerRole, ts: now, skill: skill.name, effect: skill.effect }
+        });
+      });
+    }
+
+    input.addEventListener('input', () => {
+      if (input.disabled || winner) return;
+      const typed = input.value.trim();
+      if (!typed) return;
+      if (gameMode === 'practice') {
+        const skill = skillNameIndex.p1.get(typed.toLowerCase());
+        if (!skill) return;
+        const readyAt = cooldownState.p1?.[skill.id] || 0;
+        if (readyAt > Date.now()) {
+          status.textContent = `${skill.name} is still cooling down!`;
+          return;
+        }
+        input.value = '';
+        attemptPracticeSkill('p1', skill);
+      } else {
+        if (!joinedRoom || !playerRole) return;
+        const roleKey = getRoleKey();
+        if (!roleKey) return;
+        const skill = skillNameIndex[roleKey].get(typed.toLowerCase());
+        if (!skill) return;
+        const readyAt = cooldownState[roleKey]?.[skill.id] || 0;
+        if (readyAt > Date.now()) {
+          status.textContent = `${skill.name} is still cooling down!`;
+          return;
+        }
+        attemptSkill(skill);
+      }
+    });
+
+    // Per-attack cooldown handling and remote animations
+    function attachAttackListeners(roomRef) {
+      roomRef.child('lastAttack').on('value', s => {
+        const attack = s.val();
+        if (!attack) return;
+        animateAttack(attack.attackerRole, attack.skill || '', attack.effect || 'damage');
+        // Clear and refocus textbox on any attack (both players)
+        input.value = '';
+        setTimeout(() => input.focus(), 0);
+      });
+    }
+
+    // Ready button
+    readyBtn.addEventListener('click', () => {
+      if (!joinedRoom || !playerRole) return;
+      const roleKey = playerRole === 'Player 1' ? 'p1' : 'p2';
+      const roomRef = db.ref(`rooms/${joinedRoom}`);
+      roomRef.child(`ready/${roleKey}`).set(true);
+      readyBtn.disabled = true;
+      readyStatus.textContent = 'You: Ready';
+    });
+
+    rematchBtn.addEventListener('click', () => {
+      if (!joinedRoom || !playerRole || rematchBtn.disabled) return;
+      const roleKey = getRoleKey();
+      if (!roleKey) return;
+      rematchBtn.disabled = true;
+      rematchBtn.textContent = 'Waiting...';
+      const roomRef = db.ref(`rooms/${joinedRoom}`);
+      roomRef.child(`rematch/${roleKey}`).set(true);
+      roomRef.child('statusMessage').set(`${playerRole} wants a rematch!`);
+      rematchStatus.textContent = 'You: Ready • Opponent: Waiting';
+    });
+
+    // Cancel match (works for both practice and online)
+    cancelGameBtn.addEventListener('click', () => {
+      if (gameMode === 'practice') {
+        stopPractice();
+        winner = null;
+        input.disabled = true;
+        resultBanner.classList.add('hidden');
+        showLobby();
+      } else {
+        if (joinedRoomRef && joinedRoom) {
+          joinedRoomRef.child('statusMessage').set(`${playerRole} cancelled the match`);
+        }
+        leaveRoom();
+      }
+    });
+
+    // Lobby button (shown after a match ends)
+    lobbyBtn.addEventListener('click', () => {
+      if (gameMode === 'practice') {
+        stopPractice();
+        winner = null;
+      } else {
+        if (joinedRoomRef && joinedRoom) {
+          joinedRoomRef.child('statusMessage').set(`${playerRole} returned to the lobby`);
+        }
+        leaveRoom();
+      }
+      input.disabled = true;
+      resultBanner.classList.add('hidden');
+      showLobby();
+    });
+
+    generateButton.addEventListener('click', () => {
+      const newRoomId = generateRoomID();
+      roomInput.value = newRoomId;
+      generatedRoomID.textContent = newRoomId;
+      gameMode = 'online';
+      // Directly join; joinRoom will initialize room state if missing
+      joinRoom(newRoomId);
+    });
+
+    joinButton.addEventListener('click', () => {
+      const roomId = roomInput.value.trim().toUpperCase();
+      if (roomId) {
+        gameMode = 'online';
+        joinRoom(roomId);
+      }
+    });
+
+    // Firebase connectivity diagnostics
+    const connRef = db.ref('.info/connected');
+    connRef.on('value', s => {
+      const isConnected = !!s.val();
+      if (!joinedRoom) {
+        status.textContent = isConnected ? 'Connected to Firebase' : 'Connecting to Firebase...';
+      }
+    });
+    db.ref('debug/lastPing').set(Date.now()).then(() => {
+      if (!joinedRoom) status.textContent = 'Firebase write test: OK';
+    }).catch(err => {
+      if (!joinedRoom) status.textContent = 'Firebase write failed: ' + err.message;
+      console.error('Firebase write failed', err);
+    });
+
+    // Create Room flow (does not auto-join)
+    createRoomBtn.addEventListener('click', () => {
+      gameMode = 'online';
+      createRoomOnly();
+    });
+    joinCreatedBtn.addEventListener('click', () => {
+      if (!createdRoomIdVal) return;
+      gameMode = 'online';
+      joinRoom(createdRoomIdVal);
+    });
+    copyCreatedBtn.addEventListener('click', async () => {
+      if (!createdRoomIdVal) return;
+      try {
+        await navigator.clipboard.writeText(createdRoomIdVal);
+        status.textContent = 'Room ID copied!';
+      } catch (e) {
+        status.textContent = 'Copy failed. Manually copy the ID.';
+      }
+    });
+
+    // Practice mode
+    startPracticeBtn.addEventListener('click', () => {
+      practiceDifficulty = (difficultySelect.value || 'normal');
+      startPractice();
+    });
+
+    // Quick Match
+    quickMatchBtn.addEventListener('click', () => {
+      startQuickMatch();
+    });
+    cancelMatchBtn.addEventListener('click', () => {
+      cancelQuickMatch();
+    });
+    window.addEventListener('beforeunload', cancelQuickMatch);
+    window.addEventListener('pagehide', cancelQuickMatch);
+
+    // Initialize a local skill until room state is loaded
+    // (removed)
+
+    function startRoomCleanup() {
+      setInterval(() => {
+        const cutoff = Date.now() - ROOM_TTL;
+        db.ref('rooms').orderByChild('meta/createdAt').endAt(cutoff).limitToFirst(10).once('value').then(snapshot => {
+          snapshot.forEach(roomSnap => {
+            const roomVal = roomSnap.val() || {};
+            const players = roomVal.players || {};
+            const hasPlayers = Object.values(players).some(Boolean);
+            if (!hasPlayers) {
+              db.ref(`rooms/${roomSnap.key}`).remove().catch(err => console.error('Failed to remove stale room', err));
+            }
+          });
+        }).catch(err => console.error('Room cleanup failed', err));
+      }, 60000);
+    }
+
+    function showLobby() {
+      if (lobbyEl) lobbyEl.style.display = '';
+      if (gameEl) gameEl.style.display = 'none';
+    }
+    function showGame() {
+      if (lobbyEl) lobbyEl.style.display = 'none';
+      if (gameEl) gameEl.style.display = '';
+    }
+    // Start on lobby view
+    showLobby();
+    startRoomCleanup();
+  </script>
+</body>
+</html>
+
+
